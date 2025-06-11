@@ -1,151 +1,125 @@
-import React from 'react';
-import { Link, useLocation } from 'wouter';
-import { cn } from '@/lib/utils';
-import { Music, Home, Search, User, Disc, Sparkles, BarChart2 } from 'lucide-react';
+import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { CircleUser, Home, Library, ListMusic, LayoutGrid, Heart, History, Bot } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
-const Sidebar = () => {
-  const [location] = useLocation();
+type SidebarProps = {
+  activeRoute: string;
+};
 
-  const isActiveRoute = (route: string) => {
-    return location === route;
-  };
-
+export default function Sidebar({ activeRoute }: SidebarProps) {
+  const { user } = useAuth();
+  
+  // Fetch user playlists
+  const { data: playlists } = useQuery({
+    queryKey: ["/api/playlists"],
+    enabled: !!user,
+  });
+  
   return (
-    <aside className="hidden md:flex flex-col w-64 bg-card border-r border-border h-full">
-      {/* Logo */}
-      <div className="p-4 border-b border-border">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-            <Music className="w-5 h-5 text-white" />
-          </div>
-          <h1 className="text-xl font-bold">Müzik Asistanım</h1>
-        </div>
-      </div>
-
-      {/* Navigation Links */}
-      <nav className="flex-1 overflow-y-auto py-4 px-2">
-        <ul className="space-y-1">
-          <li>
+    <aside className="bg-sidebar h-full w-20 md:w-64 flex-shrink-0 flex flex-col border-r border-sidebar-border hidden md:flex">
+      <nav className="flex-1 pt-4">
+        <ul>
+          <li className="mb-2 px-3">
             <Link href="/">
-              <div className={cn(
-                "flex items-center px-3 py-2 text-sm rounded-md font-medium",
-                isActiveRoute("/") 
-                  ? "bg-primary/20 text-primary" 
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+              <a className={cn(
+                "flex items-center py-3 px-3 rounded-md hover:bg-sidebar-accent transition",
+                activeRoute === "/" && "bg-sidebar-accent text-sidebar-primary"
               )}>
-                <Home className="w-5 h-5 mr-3" />
-                Ana Sayfa
-              </div>
+                <Home className="h-5 w-5 md:h-5 md:w-5" />
+                <span className="ml-3 text-sm font-medium hidden md:block">Keşfet</span>
+              </a>
             </Link>
           </li>
-          <li>
-            <Link href="/explore">
-              <div className={cn(
-                "flex items-center px-3 py-2 text-sm rounded-md font-medium",
-                isActiveRoute("/explore") 
-                  ? "bg-primary/20 text-primary" 
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          
+          <li className="mb-2 px-3">
+            <Link href="/library">
+              <a className={cn(
+                "flex items-center py-3 px-3 rounded-md hover:bg-sidebar-accent transition",
+                activeRoute === "/library" && "bg-sidebar-accent text-sidebar-primary"
               )}>
-                <Search className="w-5 h-5 mr-3" />
-                Keşfet
-              </div>
+                <Library className="h-5 w-5 md:h-5 md:w-5" />
+                <span className="ml-3 text-sm font-medium hidden md:block">Kitaplık</span>
+              </a>
             </Link>
           </li>
-          <li>
-            <Link href="/artists">
-              <div className={cn(
-                "flex items-center px-3 py-2 text-sm rounded-md font-medium",
-                isActiveRoute("/artists") 
-                  ? "bg-primary/20 text-primary" 
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          
+          <li className="mb-2 px-3">
+            <Link href="/assistant">
+              <a className={cn(
+                "flex items-center py-3 px-3 rounded-md hover:bg-sidebar-accent transition",
+                activeRoute === "/assistant" && "bg-sidebar-accent text-sidebar-primary"
               )}>
-                <User className="w-5 h-5 mr-3" />
-                Sanatçılar
-              </div>
+                <Bot className="h-5 w-5 md:h-5 md:w-5" />
+                <span className="ml-3 text-sm font-medium hidden md:block">AI Asistan</span>
+              </a>
             </Link>
           </li>
-          <li>
-            <Link href="/albums">
-              <div className={cn(
-                "flex items-center px-3 py-2 text-sm rounded-md font-medium",
-                isActiveRoute("/albums") 
-                  ? "bg-primary/20 text-primary" 
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          
+          <li className="mb-2 px-3">
+            <Link href="/profile">
+              <a className={cn(
+                "flex items-center py-3 px-3 rounded-md hover:bg-sidebar-accent transition",
+                activeRoute === "/profile" && "bg-sidebar-accent text-sidebar-primary"
               )}>
-                <Disc className="w-5 h-5 mr-3" />
-                Albümler
-              </div>
-            </Link>
-          </li>
-          <li>
-            <Link href="/recommendations">
-              <div className={cn(
-                "flex items-center px-3 py-2 text-sm rounded-md font-medium",
-                isActiveRoute("/recommendations") 
-                  ? "bg-primary/20 text-primary" 
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-              )}>
-                <Sparkles className="w-5 h-5 mr-3" />
-                Öneriler
-              </div>
-            </Link>
-          </li>
-          <li>
-            <Link href="/visualizer">
-              <div className={cn(
-                "flex items-center px-3 py-2 text-sm rounded-md font-medium",
-                isActiveRoute("/visualizer") 
-                  ? "bg-primary/20 text-primary" 
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-              )}>
-                <BarChart2 className="w-5 h-5 mr-3" />
-                Görselleştirici
-              </div>
+                <CircleUser className="h-5 w-5 md:h-5 md:w-5" />
+                <span className="ml-3 text-sm font-medium hidden md:block">Profil</span>
+              </a>
             </Link>
           </li>
         </ul>
-
-        <div className="mt-8 px-3">
-          <h3 className="text-xs uppercase text-muted-foreground font-medium tracking-wider mb-2">Çalma Listeleri</h3>
-          <ul className="space-y-1">
-            <li>
-              <a href="#" className="flex items-center px-3 py-2 text-sm rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
-                <span className="w-2 h-2 bg-primary rounded-full mr-3"></span>
-                Favori Parçalarım
-              </a>
+        
+        <div className="mt-8 px-6 hidden md:block">
+          <h3 className="text-xs uppercase text-muted-foreground font-medium mb-3">Kitaplık</h3>
+          <ul>
+            <li className="mb-2">
+              <Link href="/library/liked">
+                <a className="flex items-center py-2 text-sm hover:text-foreground transition">
+                  <Heart className="h-4 w-4 text-red-500 mr-3" />
+                  Beğendiklerim
+                </a>
+              </Link>
             </li>
-            <li>
-              <a href="#" className="flex items-center px-3 py-2 text-sm rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
-                <span className="w-2 h-2 bg-purple-500 rounded-full mr-3"></span>
-                Keşfedilecekler
-              </a>
+            <li className="mb-2">
+              <Link href="/library/recent">
+                <a className="flex items-center py-2 text-sm hover:text-foreground transition">
+                  <History className="h-4 w-4 text-muted-foreground mr-3" />
+                  Son Çalınanlar
+                </a>
+              </Link>
             </li>
-            <li>
-              <a href="#" className="flex items-center px-3 py-2 text-sm rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
-                <span className="w-2 h-2 bg-pink-500 rounded-full mr-3"></span>
-                En Çok Dinlenenler
-              </a>
+            <li className="mb-2">
+              <Link href="/library/playlists">
+                <a className="flex items-center py-2 text-sm hover:text-foreground transition">
+                  <ListMusic className="h-4 w-4 text-muted-foreground mr-3" />
+                  Çalma Listeleri
+                </a>
+              </Link>
             </li>
           </ul>
         </div>
+        
+        <div className="mt-8 px-6 hidden md:block">
+          <h3 className="text-xs uppercase text-muted-foreground font-medium mb-3">Çalma Listeleri</h3>
+          <ul>
+            {playlists && playlists.length > 0 ? (
+              playlists.map((playlist: any) => (
+                <li className="mb-2" key={playlist.id}>
+                  <Link href={`/playlist/${playlist.id}`}>
+                    <a className="flex items-center py-2 text-sm hover:text-foreground transition">
+                      <ListMusic className="h-4 w-4 text-muted-foreground mr-3" />
+                      {playlist.name}
+                    </a>
+                  </Link>
+                </li>
+              ))
+            ) : (
+              <li className="text-sm text-muted-foreground py-2">Henüz çalma listeniz yok</li>
+            )}
+          </ul>
+        </div>
       </nav>
-
-      {/* User Menu */}
-      <div className="p-4 border-t border-border mt-auto">
-        <Link href="/profile">
-          <div className="flex items-center space-x-2 w-full hover:bg-secondary p-2 rounded-md transition-colors">
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-              <span className="text-xs font-medium">MK</span>
-            </div>
-            <span className="text-sm font-medium truncate">Müzik Kullanıcısı</span>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 ml-auto">
-              <path d="m6 9 6 6 6-6"></path>
-            </svg>
-          </div>
-        </Link>
-      </div>
     </aside>
   );
-};
-
-export default Sidebar;
+}

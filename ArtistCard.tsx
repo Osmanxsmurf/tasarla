@@ -1,38 +1,47 @@
-import React from 'react';
-import { cn } from '@/lib/utils';
+import { User } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-interface ArtistCardProps {
+type Artist = {
+  id?: number;
   name: string;
-  imageUrl: string;
-  onClick?: () => void;
-  className?: string;
-}
+  image?: string;
+};
 
-export const ArtistCard: React.FC<ArtistCardProps> = ({
-  name,
-  imageUrl,
-  onClick,
-  className,
-}) => {
+type ArtistCardProps = {
+  artist: Artist;
+  className?: string;
+  onView?: (artist: Artist) => void;
+};
+
+export default function ArtistCard({ artist, className, onView }: ArtistCardProps) {
   const handleClick = () => {
-    if (onClick) {
-      onClick();
+    if (onView) {
+      onView(artist);
     }
   };
   
   return (
     <div 
-      className={cn("text-center cursor-pointer", className)}
+      className={cn(
+        "text-center cursor-pointer",
+        className
+      )}
       onClick={handleClick}
     >
-      <div className="w-full aspect-square rounded-full overflow-hidden mb-3 bg-secondary transition-transform hover:scale-105">
-        <img 
-          src={imageUrl} 
-          alt={name} 
-          className="w-full h-full object-cover" 
-        />
+      <div className="relative mb-3 w-full aspect-square rounded-full overflow-hidden mx-auto">
+        {artist.image ? (
+          <img 
+            src={artist.image} 
+            alt={artist.name} 
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full bg-muted flex items-center justify-center">
+            <User className="h-1/3 w-1/3 text-muted-foreground" />
+          </div>
+        )}
       </div>
-      <h3 className="font-medium text-sm truncate">{name}</h3>
+      <h3 className="text-sm font-medium">{artist.name}</h3>
     </div>
   );
-};
+}

@@ -1,52 +1,70 @@
-import React from 'react';
-import { Play } from 'lucide-react';
-import { LastFmAlbum } from '@/types/lastfm';
-import { useMusic } from '@/contexts/MusicContext';
+import { PlayIcon, Disc } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { usePlayer } from "@/contexts/PlayerContext";
 
-interface AlbumCardProps {
-  album: LastFmAlbum;
-}
+type Album = {
+  id?: number;
+  title: string;
+  artist: string;
+  year?: string;
+  coverImage?: string;
+  // This would contain tracks in a real implementation
+  tracks?: any[];
+};
 
-const AlbumCard = ({ album }: AlbumCardProps) => {
-  const { playTrack } = useMusic();
+type AlbumCardProps = {
+  album: Album;
+  className?: string;
+};
+
+export default function AlbumCard({ album, className }: AlbumCardProps) {
+  const { playTrack } = usePlayer();
   
   const handlePlay = () => {
-    // If the album has tracks, play the first one
-    if (album.tracks?.track && album.tracks.track.length > 0) {
-      playTrack(album.tracks.track[0]);
-    } else {
-      // If no tracks are available, we can't play. In a real app,
-      // we would fetch the album's tracks first.
-      console.log('No tracks available for this album');
+    // In a real implementation, we would start playing the first track of the album
+    // For now, we'll just create a mock track from the album data
+    if (album) {
+      playTrack({
+        id: album.id || 0,
+        title: album.title,
+        artist: album.artist,
+        album: album.title,
+        coverImage: album.coverImage
+      });
     }
   };
   
   return (
-    <div className="bg-card rounded-lg p-3 hover:bg-secondary transition-colors cursor-pointer group" onClick={handlePlay}>
-      <div className="mb-3 rounded-md overflow-hidden relative aspect-square">
-        {album.image?.[3]['#text'] ? (
+    <div 
+      className={cn(
+        "bg-card rounded-lg p-3 hover:bg-muted transition cursor-pointer group",
+        className
+      )}
+      onClick={handlePlay}
+    >
+      <div className="relative mb-3 aspect-square rounded-md overflow-hidden">
+        {album.coverImage ? (
           <img 
-            src={album.image[3]['#text']} 
-            alt={`${album.name} by ${album.artist}`} 
-            className="w-full h-full object-cover" 
+            src={album.coverImage} 
+            alt={`${album.title} - ${album.artist}`} 
+            className="w-full h-full object-cover"
           />
         ) : (
           <div className="w-full h-full bg-muted flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10 text-foreground/60">
-              <circle cx="12" cy="12" r="10"></circle>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
+            <Disc className="h-16 w-16 text-muted-foreground" />
           </div>
         )}
-        
-        <button className="absolute bottom-2 right-2 w-10 h-10 bg-primary rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0">
-          <Play className="w-5 h-5 text-white" />
-        </button>
+        <div className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+          <button className="bg-primary text-primary-foreground p-2 rounded-full">
+            <PlayIcon className="h-5 w-5 ml-0.5" />
+          </button>
+        </div>
       </div>
-      <h3 className="font-medium text-sm mb-1 truncate">{album.name}</h3>
-      <p className="text-muted-foreground text-xs truncate">{album.artist}</p>
+      <h3 className="text-sm font-medium truncate">{album.title}</h3>
+      <p className="text-xs text-muted-foreground truncate">{album.artist}</p>
+      {album.year && (
+        <p className="text-xs text-muted-foreground mt-1">Albüm • {album.year}</p>
+      )}
     </div>
   );
-};
-
-export default AlbumCard;
+}
