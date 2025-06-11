@@ -1,180 +1,177 @@
-import React, { useEffect, useState } from "react";
-import { AudioPlayer } from "@/components/ui/audio-player";
-import { getYouTubeEmbedUrl } from "@/lib/youtube";
-import { usePlayerContext } from "@/context/player-context";
-import { Heart } from "lucide-react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { addFavorite, removeFavorite, addPlayHistory } from "@/lib/api";
-import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { Slider } from "@/components/ui/slider";
+import { usePlayer } from "@/hooks/use-player";
 
 export function MusicPlayer() {
-  const { toast } = useToast();
-  const { 
-    currentTrack, 
-    queue, 
-    playNextTrack, 
-    playPreviousTrack,
-    isAuthenticated 
-  } = usePlayerContext();
-  
-  const [isFavorite, setIsFavorite] = useState(false);
-  
-  // Query to check if track is favorite
-  const { data: favorites } = useQuery({
-    queryKey: ["/api/favorites"],
-    enabled: isAuthenticated && !!currentTrack,
-    staleTime: 10000, // 10 seconds
-  });
-  
-  // Mutation for adding to favorites
-  const addToFavoritesMutation = useMutation({
-    mutationFn: addFavorite,
-    onSuccess: () => {
-      setIsFavorite(true);
-      toast({
-        title: "Added to favorites",
-        description: `${currentTrack?.title} has been added to your favorites`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Failed to add to favorites",
-        description: error.message || "Please try again later",
-        variant: "destructive",
-      });
-    },
-  });
-  
-  // Mutation for removing from favorites
-  const removeFromFavoritesMutation = useMutation({
-    mutationFn: removeFavorite,
-    onSuccess: () => {
-      setIsFavorite(false);
-      toast({
-        title: "Removed from favorites",
-        description: `${currentTrack?.title} has been removed from your favorites`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Failed to remove from favorites",
-        description: error.message || "Please try again later",
-        variant: "destructive",
-      });
-    },
-  });
-  
-  // Mutation for adding to play history
-  const addToHistoryMutation = useMutation({
-    mutationFn: addPlayHistory,
-  });
-  
-  // Check if the current track is in favorites
-  useEffect(() => {
-    if (currentTrack && favorites) {
-      const found = favorites.some((favorite: any) => 
-        favorite.trackId === currentTrack.id
-      );
-      setIsFavorite(found);
-    } else {
-      setIsFavorite(false);
-    }
-  }, [currentTrack, favorites]);
-  
-  // Add to play history when track changes
-  useEffect(() => {
-    if (currentTrack && isAuthenticated) {
-      addToHistoryMutation.mutate({
-        trackId: currentTrack.id,
-        title: currentTrack.title,
-        artist: currentTrack.artist,
-        albumArt: currentTrack.thumbnail,
-        source: currentTrack.source,
-      });
-    }
-  }, [currentTrack, isAuthenticated]);
-  
-  // Toggle favorite
-  const toggleFavorite = () => {
-    if (!isAuthenticated || !currentTrack) return;
-    
-    if (isFavorite) {
-      removeFromFavoritesMutation.mutate(currentTrack.id);
-    } else {
-      addToFavoritesMutation.mutate({
-        trackId: currentTrack.id,
-        title: currentTrack.title,
-        artist: currentTrack.artist,
-        albumArt: currentTrack.thumbnail,
-        source: currentTrack.source,
-      });
-    }
+  const {
+    currentTrack,
+    isPlaying,
+    currentTime,
+    duration,
+    volume,
+    isShuffling,
+    isRepeating,
+    toggle,
+    seekTo,
+    setVolume,
+    previousTrack,
+    nextTrack,
+    toggleShuffle,
+    toggleRepeat,
+    toggleLike,
+  } = usePlayer();
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
-  
+
+  const handleProgressChange = (value: number[]) => {
+    seekTo(value[0]);
+  };
+
+  const handleVolumeChange = (value: number[]) => {
+    setVolume(value[0] / 100);
+  };
+
   if (!currentTrack) {
     return null;
   }
-  
-  // For YouTube tracks, generate an embed URL
-  const audioSrc = currentTrack.source === 'youtube' 
-    ? getYouTubeEmbedUrl(currentTrack.id)
-    : currentTrack.url;
-  
+
   return (
-    <footer className="fixed bottom-0 left-0 right-0 bg-dark-200 border-t border-dark-100 py-3 px-4 z-40">
-      <div className="flex items-center">
-        {/* Track Info */}
-        <div className="flex items-center w-1/4 min-w-[180px]">
-          <div className="h-12 w-12 rounded overflow-hidden mr-3 flex-shrink-0">
-            {currentTrack.thumbnail ? (
-              <img 
-                src={currentTrack.thumbnail} 
-                alt={`${currentTrack.title} by ${currentTrack.artist}`} 
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full bg-dark-100 flex items-center justify-center">
-                <svg viewBox="0 0 24 24" className="h-6 w-6 text-light-300" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                </svg>
-              </div>
-            )}
+    <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 p-4 z-50">
+      <div className="flex items-center justify-between max-w-screen-xl mx-auto">
+        {/* Currently Playing */}
+        <div className="flex items-center space-x-4 w-1/4 min-w-0">
+          <img
+            src={currentTrack.imageUrl || "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100"}
+            alt={`${currentTrack.title} by ${currentTrack.artist}`}
+            className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
+          />
+          <div className="min-w-0 flex-1">
+            <h4 className="font-medium text-white truncate">{currentTrack.title}</h4>
+            <p className="text-sm text-gray-400 truncate">{currentTrack.artist}</p>
           </div>
-          <div className="overflow-hidden mr-4">
-            <h4 className="font-medium truncate">{currentTrack.title}</h4>
-            <p className="text-sm text-light-300 truncate">{currentTrack.artist}</p>
-          </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={toggleFavorite}
-            className="text-light-300 hover:text-primary hidden md:block"
-            disabled={!isAuthenticated}
+          <Button
+            variant="ghost"
+            size="sm"
+            className={`w-8 h-8 rounded-full transition-colors ${
+              currentTrack.isLiked ? "text-red-400 hover:text-red-300" : "text-gray-400 hover:text-red-400"
+            }`}
+            onClick={toggleLike}
           >
-            <Heart className={cn(isFavorite && "fill-primary text-primary")} size={18} />
+            <i className="fas fa-heart text-sm" />
           </Button>
         </div>
-        
+
         {/* Player Controls */}
-        <div className="flex-1 max-w-2xl mx-auto">
-          <AudioPlayer 
-            src={audioSrc}
-            title={currentTrack.title}
-            artist={currentTrack.artist}
-            albumArt={currentTrack.thumbnail}
-            onNext={queue.length > 0 ? playNextTrack : undefined}
-            onPrevious={playPreviousTrack}
-            onEnded={playNextTrack}
-          />
+        <div className="flex flex-col items-center space-y-2 w-1/2">
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`w-8 h-8 rounded-full transition-colors ${
+                isShuffling ? "text-green-400" : "text-gray-400 hover:text-white"
+              }`}
+              onClick={toggleShuffle}
+            >
+              <i className="fas fa-random text-sm" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-8 h-8 rounded-full text-gray-400 hover:text-white transition-colors"
+              onClick={previousTrack}
+            >
+              <i className="fas fa-step-backward" />
+            </Button>
+
+            <Button
+              size="sm"
+              className="w-12 h-12 bg-white hover:bg-gray-100 text-black rounded-full transition-all hover:scale-105"
+              onClick={toggle}
+            >
+              <i className={`fas ${isPlaying ? "fa-pause" : "fa-play"} text-lg`} />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-8 h-8 rounded-full text-gray-400 hover:text-white transition-colors"
+              onClick={nextTrack}
+            >
+              <i className="fas fa-step-forward" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`w-8 h-8 rounded-full transition-colors ${
+                isRepeating ? "text-green-400" : "text-gray-400 hover:text-white"
+              }`}
+              onClick={toggleRepeat}
+            >
+              <i className="fas fa-redo text-sm" />
+            </Button>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="flex items-center space-x-3 w-full max-w-md">
+            <span className="text-xs text-gray-400 w-10 text-right">
+              {formatTime(currentTime)}
+            </span>
+            <Slider
+              value={[currentTime]}
+              max={duration || 100}
+              step={1}
+              onValueChange={handleProgressChange}
+              className="flex-1"
+            />
+            <span className="text-xs text-gray-400 w-10">
+              {formatTime(duration)}
+            </span>
+          </div>
         </div>
-        
-        {/* Extra Space for Balance */}
-        <div className="hidden md:block w-1/4">
-          {/* This is an empty space to balance the layout */}
+
+        {/* Volume & Additional Controls */}
+        <div className="flex items-center space-x-3 w-1/4 justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-8 h-8 rounded-full text-gray-400 hover:text-white transition-colors"
+          >
+            <i className="fas fa-list text-sm" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-8 h-8 rounded-full text-gray-400 hover:text-white transition-colors"
+          >
+            <i className="fas fa-desktop text-sm" />
+          </Button>
+
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-8 h-8 rounded-full text-gray-400 hover:text-white transition-colors"
+            >
+              <i className="fas fa-volume-up text-sm" />
+            </Button>
+            <Slider
+              value={[volume * 100]}
+              max={100}
+              step={1}
+              onValueChange={handleVolumeChange}
+              className="w-20"
+            />
+          </div>
         </div>
       </div>
-    </footer>
+    </div>
   );
 }
