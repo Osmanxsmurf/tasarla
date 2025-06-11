@@ -1,38 +1,76 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 271 76% 63%;
-  --primary-foreground: 240 10% 3.9%;
-  --secondary: 240 3.7% 15.9%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 142 70% 49%;
-  --accent-foreground: 240 5.9% 10%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 240 4.9% 83.9%;
-  --radius: 0.5rem;
-  
-  /* Music app specific colors */
-  --surface: 240 4% 12%;
-  --text-primary: 0 0% 100%;
-  --text-secondary: 240 5% 70%;
-}
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
 
-/* Light theme is removed because the design is dark-only */
+    --card: 0 0% 95%;
+    --card-foreground: 0 0% 3.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+
+    --primary: 272 91% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 4% 80%;
+    --secondary-foreground: 0 0% 3.9%;
+
+    --muted: 240 4% 90%;
+    --muted-foreground: 240 5% 35%;
+
+    --accent: 272 91% 80%;
+    --accent-foreground: 0 0% 3.9%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 4% 80%;
+    --input: 240 4% 80%;
+    --ring: 240 5% 35%;
+
+    --chart-1: 215 100% 50%;
+    --chart-2: 272 91% 50%;
+    --chart-3: 338 90% 62%;
+    --chart-4: 150 75% 50%;
+    --chart-5: 50 90% 60%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 0 0% 7%;
+    --foreground: 0 0% 98%;
+    
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 98%;
+    
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 98%;
+    
+    --primary: 272 91% 50%;
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 0 0% 98%;
+    
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 65%;
+    
+    --accent: 272 91% 50%;
+    --accent-foreground: 0 0% 98%;
+    
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 0 0% 98%;
+    
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 240 5% 65%;
+  }
+}
 
 @layer base {
   * {
@@ -44,69 +82,31 @@
   }
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-}
-::-webkit-scrollbar-track {
-  background: hsl(var(--background));
-}
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--secondary));
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
+/* Custom styles */
+.music-gradient {
+  background: linear-gradient(to bottom, rgba(109, 40, 217, 0.7), rgba(0, 0, 0, 0));
 }
 
-/* Player progress animations */
-@keyframes progress {
-  0% { width: 0%; }
-  100% { width: 100%; }
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
-.progress-animation {
-  animation: progress linear;
-  animation-play-state: paused;
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-.playing .progress-animation {
-  animation-play-state: running;
+.player-controls {
+  @apply flex items-center justify-between;
 }
 
-/* Wave animation for playing state */
-.wave-animation span {
-  display: inline-block;
-  width: 3px;
-  height: 16px;
-  margin-right: 3px;
-  background-color: hsl(var(--primary));
-  animation: wave 1.2s infinite ease-in-out;
+@keyframes equalizer {
+  0% { height: 20%; }
+  50% { height: 80%; }
+  100% { height: 20%; }
 }
 
-.wave-animation span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.wave-animation span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-.wave-animation span:nth-child(4) {
-  animation-delay: 0.6s;
-}
-
-@keyframes wave {
-  0%, 100% { transform: scaleY(0.5); }
-  50% { transform: scaleY(1); }
-}
-
-/* Fade in animation */
-@keyframes fadeIn {
-  0% { opacity: 0; }
-  100% { opacity: 1; }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.5s ease-in-out;
+.equalizer div {
+  animation: equalizer 0.7s ease infinite;
+  animation-delay: calc(var(--i) * 0.1s);
 }
