@@ -1,241 +1,298 @@
-import React, { useState, useEffect } from 'react';
-import { useMusic } from '@/contexts/MusicContext';
-import { cn } from '@/lib/utils';
-import { Song } from '@/lib/data';
-import { YouTubeEmbed } from './YouTubeEmbed';
-import { searchYouTube, createSearchQuery } from '@/lib/youtube';
-import { DEFAULT_COVER_URL } from '@/lib/constants';
-// Icon bileşeni gerekli değil, SVG'leri doğrudan kullanıyoruz
+import React, { useEffect, useState, useRef } from 'react';
+import { AudioPlayer } from '@/components/ui/audio-player';
+import { useAudio } from '@/hooks/use-audio';
+import { Song } from '@shared/schema';
+import { 
+  addToRecentlyPlayed, 
+  likeSong, 
+  unlikeSong, 
+  fetchLikedSongs 
+} from '@/lib/xata';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Drawer } from 'vaul';
+import { useToast } from '@/hooks/use-toast';
+import { SongCard } from '@/components/SongCard';
+import { MusicPlayerContext } from '@/components/Layout';
+import { useMobile } from '@/hooks/use-mobile';
 
 interface MusicPlayerProps {
   className?: string;
 }
 
-export function MusicPlayer({ className }: MusicPlayerProps) {
-  const { currentSong, isPlaying, playNextSong, playPreviousSong, togglePlay } = useMusic();
-  const [videoId, setVideoId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [playerState, setPlayerState] = useState<'playing' | 'paused' | 'loading' | 'error'>('paused');
-  const [volume, setVolume] = useState(80);
-
-  // Şarkı değiştiğinde YouTube'dan videoyu ara
+export const MusicPlayer: React.FC<MusicPlayerProps> = ({ className }) => {
+  const { currentSong, playSong, playerState } = React.useContext(MusicPlayerContext);
+  const { toast } = useToast();
+  const [queue, setQueue] = useState<Song[]>([]);
+  const [queueIndex, setQueueIndex] = useState(0);
+  const [isFullPlayerOpen, setIsFullPlayerOpen] = useState(false);
+  const [likedSongs, setLikedSongs] = useState<number[]>([]);
+  const isMobile = useMobile();
+  
+  // Reference to track if we need to update recently played
+  const lastPlayedRef = useRef<number | null>(null);
+  
+  // Load user's liked songs
   useEffect(() => {
-    if (!currentSong) return;
-    
-    async function findVideo() {
-      setLoading(true);
-      setPlayerState('loading');
-      
+    const loadLikedSongs = async () => {
       try {
-        // YouTube'da arama yap
-        const query = createSearchQuery(currentSong.title || currentSong.name, currentSong.artist || currentSong.artist?.name);
-        const results = await searchYouTube(query, 1);
-        
-        if (results.length > 0) {
-          setVideoId(results[0].videoId);
-          setPlayerState(isPlaying ? 'playing' : 'paused');
-        } else {
-          console.error('Şarkı için video bulunamadı');
-          setPlayerState('error');
-        }
+        const liked = await fetchLikedSongs(1); // User ID 1 for demo
+        setLikedSongs(liked.map(song => song.id));
       } catch (error) {
-        console.error('Video arama hatası:', error);
-        setPlayerState('error');
-      } finally {
-        setLoading(false);
+        console.error("Error loading liked songs:", error);
       }
-    }
+    };
     
-    findVideo();
+    loadLikedSongs();
+  }, []);
+  
+  // Update recently played when song changes
+  useEffect(() => {
+    if (currentSong && currentSong.id !== lastPlayedRef.current) {
+      lastPlayedRef.current = currentSong.id;
+      
+      // Add to recently played in the backend
+      addToRecentlyPlayed(1, currentSong.id).catch(error => {
+        console.error("Error adding to recently played:", error);
+      });
+    }
   }, [currentSong]);
   
-  // Şarkı çalma durumu değiştiğinde
+  // Add current song to queue if it's not already there
   useEffect(() => {
-    setPlayerState(isPlaying ? 'playing' : 'paused');
-  }, [isPlaying]);
-
-  // Player durumu değiştiğinde
-  const handlePlayerStateChange = (state: string) => {
-    if (state === 'ended') {
-      playNextSong();
-    } else if (state === 'playing') {
-      setPlayerState('playing');
-    } else if (state === 'paused') {
-      setPlayerState('paused');
+    if (currentSong && !queue.some(song => song.id === currentSong.id)) {
+      setQueue(prev => [...prev, currentSong]);
+      setQueueIndex(queue.length);
+    }
+  }, [currentSong, queue]);
+  
+  const handleNext = () => {
+    if (queueIndex < queue.length - 1) {
+      const nextIndex = queueIndex + 1;
+      setQueueIndex(nextIndex);
+      playSong(queue[nextIndex]);
+    } else {
+      toast({
+        title: "Queue End",
+        description: "You've reached the end of your queue",
+      });
     }
   };
   
-  // Ses seviyesi değiştiğinde
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVolume(parseInt(e.target.value));
+  const handlePrevious = () => {
+    if (queueIndex > 0) {
+      const prevIndex = queueIndex - 1;
+      setQueueIndex(prevIndex);
+      playSong(queue[prevIndex]);
+    } else {
+      toast({
+        title: "Queue Start",
+        description: "You're at the start of your queue",
+      });
+    }
   };
   
-  if (!currentSong) {
+  const handleLike = () => {
+    if (!currentSong) return;
+    
+    const isCurrentlyLiked = likedSongs.includes(currentSong.id);
+    
+    if (isCurrentlyLiked) {
+      // Unlike song
+      unlikeSong(1, currentSong.id).then(() => {
+        setLikedSongs(prev => prev.filter(id => id !== currentSong.id));
+        toast({
+          title: "Removed from Liked Songs",
+          description: `"${currentSong.title}" has been removed from your liked songs`
+        });
+      }).catch(error => {
+        console.error("Error unliking song:", error);
+        toast({
+          title: "Error",
+          description: "Could not remove from liked songs. Please try again.",
+          variant: "destructive"
+        });
+      });
+    } else {
+      // Like song
+      likeSong(1, currentSong.id).then(() => {
+        setLikedSongs(prev => [...prev, currentSong.id]);
+        toast({
+          title: "Added to Liked Songs",
+          description: `"${currentSong.title}" has been added to your liked songs`
+        });
+      }).catch(error => {
+        console.error("Error liking song:", error);
+        toast({
+          title: "Error",
+          description: "Could not add to liked songs. Please try again.",
+          variant: "destructive"
+        });
+      });
+    }
+  };
+  
+  // Render nothing if no song is selected
+  if (!currentSong) return null;
+  
+  // Render the full player for mobile or mini player for desktop
+  if (isMobile) {
     return (
-      <div className={cn("bg-card shadow-lg rounded-lg p-4 flex flex-col items-center justify-center text-center h-64", className)}>
-        <div className="text-muted-foreground">
-          <p>Şu anda çalan şarkı yok</p>
-          <p className="text-sm mt-2">Bir şarkı seçerek dinlemeye başlayabilirsiniz.</p>
+      <Drawer.Root open={isFullPlayerOpen} onOpenChange={setIsFullPlayerOpen}>
+        {/* Mini player visible when full player is closed */}
+        <div className={className}>
+          <Drawer.Trigger asChild>
+            <div className="cursor-pointer">
+              <AudioPlayer
+                song={currentSong}
+                onNext={handleNext}
+                onPrevious={handlePrevious}
+                isLiked={likedSongs.includes(currentSong.id)}
+                onLike={handleLike}
+                compact={true}
+              />
+            </div>
+          </Drawer.Trigger>
         </div>
-      </div>
+        
+        {/* Full screen player on mobile */}
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 bg-black/40" />
+          <Drawer.Content className="fixed bottom-0 left-0 right-0 max-h-[90vh] rounded-t-[10px] bg-background flex flex-col">
+            <div className="p-4 overflow-y-auto flex-1 flex flex-col">
+              {/* Drag handle */}
+              <div className="mx-auto w-12 h-1.5 rounded-full bg-muted mb-6"></div>
+              
+              {/* Song artwork */}
+              <div className="relative w-full pb-4 flex justify-center">
+                <div className="relative w-full max-w-xs aspect-square rounded-xl overflow-hidden shadow-lg">
+                  <img 
+                    src={currentSong.coverImage || 'https://placehold.co/512/gray/white?text=No+Image'} 
+                    alt={`${currentSong.title} by ${currentSong.artist}`}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </div>
+              
+              {/* Song info */}
+              <div className="mt-4 text-center">
+                <h2 className="text-xl font-bold">{currentSong.title}</h2>
+                <p className="text-muted-foreground">{currentSong.artist}</p>
+              </div>
+              
+              {/* Audio player controls */}
+              <div className="mt-10">
+                <AudioPlayer
+                  song={currentSong}
+                  onNext={handleNext}
+                  onPrevious={handlePrevious}
+                  isLiked={likedSongs.includes(currentSong.id)}
+                  onLike={handleLike}
+                  showArtwork={false}
+                  className="border-none"
+                />
+              </div>
+              
+              {/* Queue */}
+              <div className="mt-6">
+                <h3 className="text-sm font-medium mb-2">Up Next</h3>
+                <div className="space-y-1">
+                  {queue.slice(queueIndex + 1, queueIndex + 4).map((song) => (
+                    <SongCard
+                      key={song.id}
+                      song={song}
+                      onPlay={() => {
+                        const newIndex = queue.findIndex(s => s.id === song.id);
+                        if (newIndex !== -1) {
+                          setQueueIndex(newIndex);
+                          playSong(song);
+                        }
+                      }}
+                      variant="horizontal"
+                    />
+                  ))}
+                  
+                  {queue.length <= queueIndex + 1 && (
+                    <div className="py-4 text-center text-muted-foreground text-sm">
+                      No more songs in queue
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
     );
   }
   
+  // Desktop version with sheet
   return (
-    <div className={cn("bg-card shadow-lg rounded-lg p-4", className)}>
-      <div className="flex flex-col md:flex-row gap-4">
-        {/* Şarkı bilgileri ve kapak resmi */}
-        <div className="flex flex-col md:w-1/3">
-          <div className="aspect-square bg-muted rounded-lg overflow-hidden">
-            {currentSong.imageUrl ? (
-              <img 
-                src={currentSong.imageUrl} 
-                alt={`${currentSong.title || currentSong.name} kapak resmi`}
-                className="w-full h-full object-cover"
+    <>
+      <div className={className}>
+        <Sheet>
+          <SheetTrigger asChild>
+            <div className="cursor-pointer">
+              <AudioPlayer
+                song={currentSong}
+                onNext={handleNext}
+                onPrevious={handlePrevious}
+                isLiked={likedSongs.includes(currentSong.id)}
+                onLike={handleLike}
               />
-            ) : (
-              <img 
-                src={DEFAULT_COVER_URL}
-                alt="Varsayılan kapak resmi"
-                className="w-full h-full object-cover"
-              />
-            )}
-          </div>
-          
-          <div className="mt-4">
-            <h3 className="text-lg font-semibold truncate">{currentSong.title || currentSong.name}</h3>
-            <p className="text-muted-foreground truncate">{currentSong.artist || currentSong.artist?.name}</p>
-            {currentSong.album && (
-              <p className="text-sm text-muted-foreground truncate mt-1">{currentSong.album}</p>
-            )}
-          </div>
-        </div>
-        
-        {/* Video oynatıcı */}
-        <div className="flex-1">
-          {videoId ? (
-            <div className="relative aspect-video rounded-lg overflow-hidden bg-black">
-              <YouTubeEmbed 
-                videoId={videoId}
-                onStateChange={handlePlayerStateChange}
-                autoplay={isPlaying}
-              />
+            </div>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-[400px] p-0 overflow-hidden">
+            <div className="h-full flex flex-col">
+              {/* Song artwork */}
+              <div className="relative w-full pb-[100%]">
+                <img 
+                  src={currentSong.coverImage || 'https://placehold.co/512/gray/white?text=No+Image'} 
+                  alt={`${currentSong.title} by ${currentSong.artist}`}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              </div>
               
-              {loading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                  <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
+              {/* Song info and player */}
+              <div className="p-4 flex-1 overflow-hidden flex flex-col">
+                <div className="text-center mb-6">
+                  <h2 className="text-xl font-bold">{currentSong.title}</h2>
+                  <p className="text-muted-foreground">{currentSong.artist}</p>
                 </div>
-              )}
-              
-              {playerState === 'error' && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-white">
-                  <div className="text-center p-4">
-                    <p>Video yüklenemedi</p>
-                    <button 
-                      onClick={() => playNextSong()}
-                      className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-md"
-                    >
-                      Sonraki şarkıya geç
-                    </button>
+                
+                <AudioPlayer
+                  song={currentSong}
+                  onNext={handleNext}
+                  onPrevious={handlePrevious}
+                  isLiked={likedSongs.includes(currentSong.id)}
+                  onLike={handleLike}
+                  showArtwork={false}
+                  className="border-none"
+                />
+                
+                {/* Queue */}
+                <div className="mt-6 flex-1 overflow-hidden">
+                  <h3 className="text-sm font-medium mb-2">Queue</h3>
+                  <div className="overflow-y-auto max-h-[calc(100%-2rem)] space-y-1 pr-2">
+                    {queue.map((song, index) => (
+                      <SongCard
+                        key={song.id}
+                        song={song}
+                        onPlay={() => {
+                          setQueueIndex(index);
+                          playSong(song);
+                        }}
+                        isPlaying={currentSong.id === song.id}
+                        variant="horizontal"
+                      />
+                    ))}
                   </div>
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="aspect-video rounded-lg bg-muted flex items-center justify-center">
-              <div className="animate-pulse">
-                <p className="text-muted-foreground">Video yükleniyor...</p>
               </div>
             </div>
-          )}
-        </div>
+          </SheetContent>
+        </Sheet>
       </div>
-      
-      {/* Kontroller */}
-      <div className="mt-4">
-        <div className="flex items-center justify-between">
-          {/* Ses seviyesi */}
-          <div className="flex items-center space-x-2">
-            <button 
-              className="p-2 rounded-full hover:bg-muted text-foreground"
-              onClick={() => setVolume(prev => (prev > 0 ? 0 : 80))}
-            >
-              {volume === 0 ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 5 6 9H2v6h4l5 4V5Z"/>
-                  <path d="M23 9l-6 6"/>
-                  <path d="m17 9 6 6"/>
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 5 6 9H2v6h4l5 4V5Z"/>
-                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-                </svg>
-              )}
-            </button>
-            <input 
-              type="range" 
-              min="0" 
-              max="100" 
-              value={volume} 
-              onChange={handleVolumeChange}
-              className="w-24 h-2 bg-muted rounded-lg appearance-none cursor-pointer"
-            />
-          </div>
-          
-          {/* Oynatma kontrolleri */}
-          <div className="flex items-center space-x-4">
-            <button 
-              className="p-3 rounded-full hover:bg-muted text-foreground"
-              onClick={playPreviousSong}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m11 17-5-5 5-5"/>
-                <path d="m18 17-5-5 5-5"/>
-              </svg>
-            </button>
-            
-            <button 
-              className="p-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={togglePlay}
-            >
-              {playerState === 'playing' ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="6" y="4" width="4" height="16"/>
-                  <rect x="14" y="4" width="4" height="16"/>
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="5 3 19 12 5 21 5 3"/>
-                </svg>
-              )}
-            </button>
-            
-            <button 
-              className="p-3 rounded-full hover:bg-muted text-foreground"
-              onClick={playNextSong}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m13 17 5-5-5-5"/>
-                <path d="m6 17 5-5-5-5"/>
-              </svg>
-            </button>
-          </div>
-          
-          {/* Tam ekran veya kapama kontrolleri */}
-          <div>
-            <button className="p-2 rounded-full hover:bg-muted text-foreground">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 3h6v6"/>
-                <path d="M9 21H3v-6"/>
-                <path d="m21 3-7 7"/>
-                <path d="m3 21 7-7"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </>
   );
-}
+};

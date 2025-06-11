@@ -328,78 +328,69 @@ export const SuperAIAssistant: React.FC<SuperAIAssistantProps> = ({ className })
         </div>
       </CardHeader>
       
-      <CardContent className="flex-1 p-0 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="p-4 space-y-6">
-            {/* Mesajları göster */}
-            {messages.map((message, index) => (
-              <MessageItem key={index} message={message} />
-            ))}
-            
-            {/* Yazıyor göstergesi */}
-            {isTyping && (
-              <div className="flex items-start gap-3">
-                <Avatar className="w-10 h-10 mt-1">
-                  <AvatarFallback className="bg-secondary">AI</AvatarFallback>
-                </Avatar>
+      <ScrollArea className="flex-1 p-4">
+        <div className="space-y-6">
+          {/* Mesaj listesi */}
+          {messages.map((message) => (
+            <MessageItem key={message.id} message={message} />
+          ))}
+          
+          {/* "Düşünüyor" durumu */}
+          {isThinking && (
+            <div className="flex items-start gap-3">
+              <Avatar className="w-10 h-10 mt-1">
+                <AvatarFallback className="bg-secondary">AI</AvatarFallback>
+              </Avatar>
+              
+              <div className="bg-card border rounded-lg p-4 max-w-[80%]">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">Düşünüyorum</span>
+                  <div className="flex gap-1">
+                    <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse"></div>
+                    <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                  </div>
+                </div>
                 
-                <div className="max-w-[80%] rounded-lg p-4 bg-card border shadow-sm">
-                  {isThinking ? (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Düşünüyor ve yanıt hazırlıyor...</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 animate-pulse">
-                      <div className="w-2 h-2 rounded-full bg-primary"></div>
-                      <div className="w-2 h-2 rounded-full bg-primary animation-delay-200"></div>
-                      <div className="w-2 h-2 rounded-full bg-primary animation-delay-500"></div>
-                    </div>
-                  )}
-                </div>
+                {/* Beyin durumu görselleştirici */}
+                {showBrainState && brainState && (
+                  <div className="mt-3">{renderBrainState()}</div>
+                )}
               </div>
-            )}
-            
-            {/* Düşünme süreci (isteğe bağlı görünüm) */}
-            {isThinking && showBrainState && brainState && (
-              <div className="ml-12">
-                {renderBrainState()}
-              </div>
-            )}
-            
-            {/* Şarkı önerileri */}
-            {recommendations.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium flex items-center gap-2">
-                  <ThumbsUp className="h-4 w-4 text-primary" />
-                  Önerilen Şarkılar
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {recommendations.map(song => (
-                    <SongCard 
-                      key={song.id} 
-                      song={song} 
-                      onClick={() => playSong(song)} 
-                      isCompact
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            <div ref={messagesEndRef} />
-          </div>
-        </ScrollArea>
-      </CardContent>
+            </div>
+          )}
+          
+          {/* Önerilen şarkılar */}
+          {recommendations.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <h3 className="text-sm font-medium mb-2">Önerilen Şarkılar</h3>
+              {recommendations.slice(0, 3).map((song) => (
+                <SongCard key={song.id} song={song} layout="list" />
+              ))}
+              {recommendations.length > 3 && (
+                <Button 
+                  variant="link" 
+                  className="text-xs p-0 h-auto"
+                  onClick={() => {/* Tüm önerileri göster */}}
+                >
+                  {recommendations.length - 3} şarkı daha göster
+                </Button>
+              )}
+            </div>
+          )}
+          
+          <div ref={messagesEndRef} />
+        </div>
+      </ScrollArea>
       
-      <CardFooter className="p-4 border-t flex flex-col gap-4">
-        {/* Sohbet önerileri */}
-        <div className="flex flex-wrap gap-2">
-          {suggestions.map((suggestion, index) => (
+      <CardFooter className="p-4 border-t flex-col gap-3">
+        {/* Öneri pilleri */}
+        <div className="flex flex-wrap gap-2 w-full">
+          {suggestions.slice(0, 3).map((suggestion) => (
             <Badge 
-              key={index} 
-              variant="secondary" 
-              className="px-3 py-1 cursor-pointer hover:bg-secondary/80 transition-colors"
+              key={suggestion} 
+              variant="outline"
+              className="bg-muted hover:bg-primary/10 cursor-pointer text-sm py-1.5 px-3 font-normal rounded-full"
               onClick={() => useSuggestion(suggestion)}
             >
               {suggestion}
@@ -407,31 +398,25 @@ export const SuperAIAssistant: React.FC<SuperAIAssistantProps> = ({ className })
           ))}
         </div>
         
-        {/* Mesaj girişi */}
         <div className="flex items-center gap-2 w-full">
           <Input
-            className="flex-1"
-            placeholder="Müzik önerisi için bir şeyler yazın..."
+            placeholder="Mesajınızı yazın..."
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            onKeyDown={handleKeyPress}
+            onKeyPress={handleKeyPress}
             disabled={isTyping}
+            className="flex-1 p-3 rounded-full"
           />
           <Button 
-            className="px-4" 
             onClick={sendMessage}
-            disabled={isTyping || !inputMessage.trim()}
+            disabled={!inputMessage.trim() || isTyping}
+            size="icon"
+            className="rounded-full"
           >
-            {isTyping ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
+            {isTyping ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
           </Button>
         </div>
       </CardFooter>
     </Card>
   );
 };
-
-export default SuperAIAssistant;

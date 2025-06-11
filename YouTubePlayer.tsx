@@ -1,228 +1,381 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect, useRef } from 'react';
+import { Song } from '@shared/schema';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
-import { ThumbsUp, ThumbsDown, Share2, ExternalLink, Heart, Play, Pause } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { 
-  searchYouTube, 
-  getRelatedVideos, 
-  getYouTubeEmbedUrl, 
-  getYouTubeWatchUrl,
-  formatDuration,
-  type YoutubeSearchResult,
-  type YoutubeVideoDetails
-} from '@/lib/youtube-api';
-import type { Song } from '@shared/schema';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Volume1, VolumeX, Heart } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
+import { cn } from '@/lib/utils';
+import { AudioVisualizer } from '@/components/ui/visualizer';
+
+// Embedding ID extractor
+function extractYouTubeId(url: string): string | null {
+  const match = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+  return (match && match[1]) || null;
+}
+
+// For creating safe song search queries
+function createSearchQuery(song: Song): string {
+  return `${song.artist} - ${song.title} official audio`;
+}
 
 interface YouTubePlayerProps {
-  searchQuery?: string;
-  videoId?: string;
-  autoplay?: boolean;
-  showRelated?: boolean;
-  onVideoSelected?: (video: YoutubeSearchResult) => void;
+  song: Song;
+  onNext?: () => void;
+  onPrevious?: () => void;
+  onEnded?: () => void;
+  onLike?: () => void;
+  isLiked?: boolean;
   className?: string;
+  showArtwork?: boolean;
+  compact?: boolean;
 }
 
-export function YouTubePlayer({
-  searchQuery,
-  videoId: initialVideoId,
-  autoplay = false,
-  showRelated = true,
-  onVideoSelected,
-  className
-}: YouTubePlayerProps) {
-  const [videoId, setVideoId] = useState<string | null>(initialVideoId || null);
-  const [isPlaying, setIsPlaying] = useState<boolean>(autoplay);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
+  song,
+  onNext,
+  onPrevious,
+  onEnded,
+  onLike,
+  isLiked = false,
+  className,
+  showArtwork = true,
+  compact = false
+}) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(70);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [showVolumeControl, setShowVolumeControl] = useState(false);
+  const [youtubeId, setYoutubeId] = useState<string | null>(null);
+  const [playerReady, setPlayerReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [relatedVideos, setRelatedVideos] = useState<YoutubeSearchResult[]>([]);
-  const [requestCount, setRequestCount] = useState<number>(0); // API çağrı sayısını takip et
-  const { toast } = useToast();
-  
-  // YouTube API çağrılarını sınırla - quota aşımını önle
-  const MAX_REQUESTS_PER_SESSION = 10; // Bu sayıyı projenize göre ayarlayın
-  
-  // Arama sorgusu değiştiğinde video bul
-  useEffect(() => {
-    if (!searchQuery || requestCount >= MAX_REQUESTS_PER_SESSION) return;
+
+  const playerContainerRef = useRef<HTMLDivElement>(null);
+  const youtubePlayerRef = useRef<YT.Player | null>(null);
+  const playerDivId = `youtube-player-${song.id}`;
+  const progressInterval = useRef<number | null>(null);
+
+  // Format time as minutes:seconds
+  const formatTime = (time: number): string => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+  };
+
+  // Toggle play/pause
+  const togglePlayPause = () => {
+    if (!youtubePlayerRef.current) return;
     
-    const searchVideo = async () => {
-      setIsLoading(true);
+    try {
+      if (isPlaying) {
+        youtubePlayerRef.current.pauseVideo();
+      } else {
+        youtubePlayerRef.current.playVideo();
+      }
+    } catch (err) {
+      console.error('Error toggling play/pause:', err);
+    }
+  };
+
+  // Set up YouTube player
+  useEffect(() => {
+    // Reset player state for new song
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsLoading(true);
+    setError(null);
+    setYoutubeId(null);
+    
+    // Clean up old player
+    if (youtubePlayerRef.current) {
       try {
-        // API çağrı sayısını artır
-        setRequestCount(prev => prev + 1);
-        
-        const results = await searchYouTube(searchQuery, 1);
-        if (results.length > 0) {
-          setVideoId(results[0].id);
-          setIsPlaying(autoplay);
-        } else {
-          setError('Video bulunamadı');
+        youtubePlayerRef.current.destroy();
+      } catch (err) {
+        console.error('Error destroying player:', err);
+      }
+      youtubePlayerRef.current = null;
+    }
+    
+    // Clear progress update interval
+    if (progressInterval.current) {
+      window.clearInterval(progressInterval.current);
+      progressInterval.current = null;
+    }
+    
+    // Extract YouTube ID from URL if available or try to search
+    if (song.youtubeId) {
+      setYoutubeId(song.youtubeId);
+    } else if (song.youtubeUrl) {
+      const id = extractYouTubeId(song.youtubeUrl);
+      setYoutubeId(id);
+    } 
+    
+    if (!window.YT) {
+      // If YouTube API isn't loaded, load it
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+      
+      // This function will be called once the API is ready
+      (window as any).onYouTubeIframeAPIReady = () => {
+        setPlayerReady(true);
+      };
+    } else {
+      setPlayerReady(true);
+    }
+  }, [song.id, song.youtubeId, song.youtubeUrl]);
+  
+  // Initialize YouTube player once we have an ID and the API is ready
+  useEffect(() => {
+    if (!youtubeId || !playerReady || !playerContainerRef.current) return;
+    
+    // Check if player container exists
+    const playerContainer = document.getElementById(playerDivId);
+    if (!playerContainer) {
+      const div = document.createElement('div');
+      div.id = playerDivId;
+      div.style.width = '100%';
+      div.style.height = '100%';
+      div.style.position = 'absolute';
+      div.style.top = '0';
+      div.style.left = '0';
+      div.style.opacity = '0';
+      div.style.pointerEvents = 'none';
+      playerContainerRef.current.appendChild(div);
+    }
+    
+    try {
+      youtubePlayerRef.current = new window.YT.Player(playerDivId, {
+        videoId: youtubeId,
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          modestbranding: 1,
+          rel: 0
+        },
+        events: {
+          onReady: (event) => {
+            event.target.setVolume(volume);
+            setDuration(event.target.getDuration());
+            setIsLoading(false);
+            // Start the progress updater
+            progressInterval.current = window.setInterval(() => {
+              try {
+                const currentTime = event.target.getCurrentTime() || 0;
+                setCurrentTime(currentTime);
+              } catch (err) {
+                console.error('Error updating progress:', err);
+              }
+            }, 1000);
+          },
+          onStateChange: (event) => {
+            // -1: unstarted, 0: ended, 1: playing, 2: paused, 3: buffering, 5: video cued
+            switch (event.data) {
+              case YT.PlayerState.PLAYING:
+                setIsPlaying(true);
+                setIsLoading(false);
+                break;
+              case YT.PlayerState.PAUSED:
+                setIsPlaying(false);
+                setIsLoading(false);
+                break;
+              case YT.PlayerState.BUFFERING:
+                setIsLoading(true);
+                break;
+              case YT.PlayerState.ENDED:
+                setIsPlaying(false);
+                if (onEnded) onEnded();
+                break;
+            }
+          },
+          onError: (event) => {
+            setError(`YouTube Error: ${event.data}`);
+            setIsLoading(false);
+          }
+        }
+      });
+    } catch (err) {
+      console.error('Error creating YouTube player:', err);
+      setError('Failed to create YouTube player');
+      setIsLoading(false);
+    }
+    
+    return () => {
+      if (progressInterval.current) {
+        window.clearInterval(progressInterval.current);
+      }
+      
+      try {
+        if (youtubePlayerRef.current) {
+          youtubePlayerRef.current.destroy();
         }
       } catch (err) {
-        console.error('Video arama hatası:', err);
-        setError('Video yüklenirken bir hata oluştu');
-        toast({
-          title: 'Video Arama Hatası',
-          description: 'Video araması sırasında bir sorun oluştu.',
-          variant: 'destructive',
-        });
-      } finally {
-        setIsLoading(false);
+        console.error('Error cleaning up YouTube player:', err);
       }
     };
-
-    searchVideo();
-  }, [searchQuery, autoplay, toast, requestCount]);
+  }, [youtubeId, playerReady, onEnded, volume]);
   
-  // Video ID değiştiğinde ilgili videoları getir
-  useEffect(() => {
-    if (!videoId || !showRelated || requestCount >= MAX_REQUESTS_PER_SESSION) return;
-
-    const fetchRelatedVideos = async () => {
-      try {
-        // API çağrı sayısını artır
-        setRequestCount(prev => prev + 1);
-        
-        const videos = await getRelatedVideos(videoId, 5);
-        setRelatedVideos(videos);
-      } catch (err) {
-        console.error('İlgili videolar yüklenirken hata:', err);
-      }
-    };
-
-    fetchRelatedVideos();
-  }, [videoId, showRelated, requestCount]);
-  
-  // API kotası aşıldığında uyarı göster
-  useEffect(() => {
-    if (requestCount >= MAX_REQUESTS_PER_SESSION) {
-      toast({
-        title: 'API Kullanım Sınırı',
-        description: 'YouTube API kullanım kotası dolmak üzere. Bazı özellikler kısıtlanabilir.',
-        variant: 'default',
-      });
-    }
-  }, [requestCount, toast]);
-  
-  // Başka bir video seç
-  const handleVideoSelect = (video: YoutubeSearchResult) => {
-    setVideoId(video.id);
-    setIsPlaying(true);
-    if (onVideoSelected) {
-      onVideoSelected(video);
+  // Seek to specific time
+  const seekTo = (time: number) => {
+    if (!youtubePlayerRef.current) return;
+    
+    try {
+      youtubePlayerRef.current.seekTo(time, true);
+    } catch (err) {
+      console.error('Error seeking:', err);
     }
   };
   
-  // YouTube'da aç
-  const openInYouTube = () => {
-    if (!videoId) return;
-    window.open(getYouTubeWatchUrl(videoId), '_blank');
+  // Handle volume change
+  const handleVolumeChange = (newVolume: number[]) => {
+    if (!youtubePlayerRef.current) return;
+    
+    try {
+      const vol = newVolume[0];
+      setVolume(vol);
+      youtubePlayerRef.current.setVolume(vol);
+    } catch (err) {
+      console.error('Error changing volume:', err);
+    }
   };
   
-  if (isLoading) {
-    return (
-      <Card className={`overflow-hidden ${className}`}>
-        <CardContent className="p-0">
-          <div className="aspect-video bg-muted flex items-center justify-center">
-            <Skeleton className="w-12 h-12 rounded-full" />
-          </div>
-        </CardContent>
-        <CardFooter className="flex justify-between p-4">
-          <Skeleton className="h-4 w-[250px]" />
-          <Skeleton className="h-10 w-[100px]" />
-        </CardFooter>
-      </Card>
-    );
-  }
+  // Toggle volume control visibility
+  const toggleVolumeControl = () => {
+    setShowVolumeControl(prev => !prev);
+  };
   
-  if (error || !videoId) {
-    return (
-      <Card className={`overflow-hidden ${className}`}>
-        <CardContent className="p-6 text-center">
-          <div className="text-destructive mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <p>{error || 'Video yüklenemedi'}</p>
-          </div>
-          {searchQuery && (
-            <Button 
-              variant="outline" 
-              onClick={() => window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`, '_blank')}
-            >
-              YouTube'da Ara
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-    );
-  }
+  // Display appropriate volume icon
+  const VolumeIcon = () => {
+    if (volume === 0) return <VolumeX size={compact ? 18 : 20} />;
+    if (volume < 50) return <Volume1 size={compact ? 18 : 20} />;
+    return <Volume2 size={compact ? 18 : 20} />;
+  };
   
   return (
-    <div className={`space-y-4 ${className}`}>
-      <Card className="overflow-hidden">
-        <CardContent className="p-0">
-          <div className="aspect-video bg-black">
-            <iframe
-              width="100%"
-              height="100%"
-              src={getYouTubeEmbedUrl(videoId, isPlaying ? 1 : 0)}
-              title="YouTube video player"
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="w-full h-full"
-            ></iframe>
-          </div>
-        </CardContent>
-        <CardFooter className="flex justify-between p-4">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={openInYouTube}>
-              <ExternalLink className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon">
-              <Heart className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardFooter>
-      </Card>
+    <div className={cn('w-full bg-card border-t border-muted flex flex-col', className)}>
+      {/* Hidden player container */}
+      <div 
+        ref={playerContainerRef}
+        className="w-1 h-1 overflow-hidden opacity-0 absolute pointer-events-none"
+      ></div>
       
-      {showRelated && relatedVideos.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-lg font-medium">Benzer Videolar</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {relatedVideos.map((video) => (
-              <Card 
-                key={video.id} 
-                className="overflow-hidden cursor-pointer hover:ring-1 ring-primary/20 transition-all"
-                onClick={() => handleVideoSelect(video)}
-              >
-                <div className="flex md:flex-row flex-col">
-                  <div className="relative w-full md:w-48 h-32">
-                    <img 
-                      src={video.thumbnailUrl} 
-                      alt={video.title} 
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                      <Play className="h-10 w-10 text-white" />
-                    </div>
-                  </div>
-                  <div className="p-3 flex-1 overflow-hidden flex flex-col">
-                    <h4 className="font-medium text-sm line-clamp-2">{video.title}</h4>
-                    <p className="text-xs text-muted-foreground mt-1">{video.channelTitle}</p>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+      {/* Visualizer */}
+      <div className="h-1 overflow-hidden">
+        <AudioVisualizer playing={isPlaying} bars={30} height={4} />
+      </div>
+      
+      {/* Playback progress */}
+      <div className="px-4 pt-1">
+        <Slider
+          value={[currentTime]}
+          max={duration || 100}
+          step={1}
+          onValueChange={(values) => seekTo(values[0])}
+          className="h-1"
+        />
+        <div className="flex justify-between mt-1 text-xs text-muted-foreground">
+          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(duration || 0)}</span>
         </div>
-      )}
+      </div>
+      
+      {/* Player controls */}
+      <div className={cn('px-4 pb-3 pt-1 flex items-center', compact ? 'gap-2' : 'gap-4')}>
+        {showArtwork && (
+          <div className={cn('bg-muted rounded overflow-hidden flex-shrink-0', compact ? 'w-10 h-10' : 'w-12 h-12')}>
+            <img 
+              src={song.coverImage || 'https://placehold.co/200/gray/white?text=No+Image'} 
+              alt={`${song.title} by ${song.artist}`} 
+              className="w-full h-full object-cover"
+            />
+          </div>
+        )}
+        
+        <div className={cn('flex-1 min-w-0', !showArtwork && 'ml-0')}>
+          <h4 className="font-medium truncate text-sm">{song.title}</h4>
+          <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+          {error && <p className="text-xs text-red-500 truncate">{error}</p>}
+        </div>
+        
+        <div className={cn('flex items-center', compact ? 'gap-1' : 'gap-2')}>
+          {!compact && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground transition-colors h-8 w-8"
+              onClick={onPrevious}
+            >
+              <SkipBack size={18} />
+            </Button>
+          )}
+          
+          <Button
+            variant={compact ? "ghost" : "primary"}
+            size="icon"
+            className={cn(
+              compact ? "text-muted-foreground hover:text-foreground h-8 w-8" : "h-10 w-10 rounded-full",
+              isLoading && "opacity-50"
+            )}
+            onClick={togglePlayPause}
+            disabled={isLoading || !!error}
+          >
+            {isPlaying ? <Pause size={compact ? 18 : 20} /> : <Play size={compact ? 18 : 20} />}
+          </Button>
+          
+          {!compact && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground transition-colors h-8 w-8"
+              onClick={onNext}
+            >
+              <SkipForward size={18} />
+            </Button>
+          )}
+          
+          {!compact && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "text-muted-foreground hover:text-foreground transition-colors h-8 w-8",
+                isLiked && "text-red-500 hover:text-red-600"
+              )}
+              onClick={onLike}
+            >
+              <Heart size={18} fill={isLiked ? "currentColor" : "none"} />
+            </Button>
+          )}
+          
+          {!compact && (
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-foreground transition-colors h-8 w-8"
+                onClick={toggleVolumeControl}
+              >
+                <VolumeIcon />
+              </Button>
+              
+              {showVolumeControl && (
+                <div className="absolute bottom-full right-0 mb-2 p-3 bg-popover border rounded-lg shadow-md w-32 z-50">
+                  <Slider
+                    value={[volume]}
+                    max={100}
+                    step={1}
+                    onValueChange={handleVolumeChange}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
-}
+};
