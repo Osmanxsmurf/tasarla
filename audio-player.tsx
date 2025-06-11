@@ -1,265 +1,241 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Howl } from 'howler';
-import { cn } from '@/lib/utils';
-import { Button } from './button';
-import { Slider } from './slider';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
+import React, { useState, useRef, useEffect } from "react";
+import { Button } from "./button";
+import { Slider } from "./slider";
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  Volume1,
+  VolumeX,
+  Repeat,
+  Shuffle
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface AudioPlayerProps {
   src: string;
-  autoPlay?: boolean;
-  onPlay?: () => void;
-  onPause?: () => void;
-  onEnd?: () => void;
+  title: string;
+  artist: string;
+  albumArt?: string;
+  onEnded?: () => void;
+  onNext?: () => void;
+  onPrevious?: () => void;
   className?: string;
 }
 
 export function AudioPlayer({
   src,
-  autoPlay = false,
-  onPlay,
-  onPause,
-  onEnd,
-  className,
+  title,
+  artist,
+  albumArt,
+  onEnded,
+  onNext,
+  onPrevious,
+  className
 }: AudioPlayerProps) {
   const [playing, setPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.7);
   const [muted, setMuted] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [repeat, setRepeat] = useState(false);
+  const [shuffle, setShuffle] = useState(false);
   
-  const soundRef = useRef<Howl | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   
+  // Update audio when src changes
   useEffect(() => {
-    if (!src) return;
-    
-    // Clean up previous sound
-    if (soundRef.current) {
-      soundRef.current.stop();
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
-    
-    setLoading(true);
-    setError(null);
-    
-    // Create new Howl instance with error handling
-    try {
-      const sound = new Howl({
-        src: [src],
-        html5: true,
-        volume: volume,
-        mute: muted,
-        onload: () => {
-          setDuration(sound.duration());
-          setLoading(false);
-          if (autoPlay) {
-            try {
-              sound.play();
-              setPlaying(true);
-              if (onPlay) onPlay();
-              startTimeTracking();
-            } catch (error) {
-              console.error("Error playing audio:", error);
-              setError('Ses dosyası oynatılamıyor');
-              setLoading(false);
-            }
-          }
-        },
-        onplay: () => {
-          setPlaying(true);
-          if (onPlay) onPlay();
-          startTimeTracking();
-        },
-        onpause: () => {
-          setPlaying(false);
-          if (onPause) onPause();
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-        },
-        onstop: () => {
-          setPlaying(false);
-          setCurrentTime(0);
-          if (onPause) onPause();
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-        },
-        onend: () => {
-          setPlaying(false);
-          setCurrentTime(0);
-          if (onEnd) onEnd();
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-        },
-        onloaderror: () => {
-          console.error("Error loading audio:", src);
-          setLoading(false);
-          setError('Ses dosyası yüklenemedi');
-        },
-        onplayerror: (id, error) => {
-          console.error("Error playing audio:", error);
-          setLoading(false);
-          setError('Ses dosyası oynatılamıyor');
-          // Try to unlock audio on iOS
-          sound.once('unlock', () => {
-            try {
-              sound.play();
-            } catch (e) {
-              console.error("Error on unlock:", e);
-            }
-          });
-        },
-      });
+    if (audioRef.current) {
+      // Reset state
+      setCurrentTime(0);
+      setDuration(0);
+      setPlaying(false);
       
-      soundRef.current = sound;
-    } catch (error) {
-      console.error("Error creating Howl instance:", error);
-      setLoading(false);
-      setError('Ses oynatıcı oluşturulamadı');
+      // Load new audio
+      audioRef.current.load();
+      
+      // Auto play when new track is loaded
+      audioRef.current.play().then(() => {
+        setPlaying(true);
+      }).catch(error => {
+        console.error("Error playing audio:", error);
+      });
     }
-    
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.stop();
-      }
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+  }, [src]);
+  
+  // Update time display
+  useEffect(() => {
+    const updateTime = () => {
+      if (audioRef.current) {
+        setCurrentTime(audioRef.current.currentTime);
+        setDuration(audioRef.current.duration || 0);
       }
     };
-  }, [src, autoPlay, onPlay, onPause, onEnd]);
-  
-  useEffect(() => {
-    if (soundRef.current) {
-      soundRef.current.volume(volume);
-    }
-  }, [volume]);
-  
-  useEffect(() => {
-    if (soundRef.current) {
-      soundRef.current.mute(muted);
-    }
-  }, [muted]);
-  
-  const startTimeTracking = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
     
-    intervalRef.current = setInterval(() => {
-      if (soundRef.current) {
-        setCurrentTime(soundRef.current.seek());
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Toggle play/pause
+  const togglePlay = () => {
+    if (audioRef.current) {
+      if (playing) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play().catch(error => {
+          console.error("Error playing audio:", error);
+        });
       }
-    }, 1000);
-  };
-  
-  const handlePlayPause = () => {
-    if (!soundRef.current) return;
-    
-    if (playing) {
-      soundRef.current.pause();
-    } else {
-      soundRef.current.play();
+      setPlaying(!playing);
     }
   };
   
-  const handleSeek = (value: number[]) => {
-    if (!soundRef.current) return;
-    
-    const newPosition = value[0];
-    soundRef.current.seek(newPosition);
-    setCurrentTime(newPosition);
-  };
-  
-  const handleVolumeChange = (value: number[]) => {
-    const newVolume = value[0];
-    setVolume(newVolume);
-    if (muted && newVolume > 0) {
-      setMuted(false);
-    }
-  };
-  
-  const handleMuteToggle = () => {
-    setMuted(!muted);
-  };
-  
+  // Format time display (e.g., 2:30)
   const formatTime = (time: number) => {
+    if (isNaN(time)) return "0:00";
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
   
-  if (error) {
-    return (
-      <div className={cn("flex flex-col items-center justify-center text-red-500 p-4 gap-2", className)}>
-        <div>{error}</div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => setError(null)}
-          className="text-xs"
-        >
-          Tekrar Dene
-        </Button>
-      </div>
-    );
-  }
+  // İkon başlıkları
+  const iconLabels = {
+    shuffle: "Karıştır",
+    previous: "Önceki",
+    play: "Oynat",
+    pause: "Duraklat",
+    next: "Sonraki",
+    repeat: "Tekrarla",
+    mute: "Sessiz",
+    unmute: "Sesi Aç"
+  };
+  
+  // Handle seek
+  const handleSeek = (value: number[]) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = value[0];
+      setCurrentTime(value[0]);
+    }
+  };
+  
+  // Handle volume change
+  const handleVolumeChange = (value: number[]) => {
+    if (audioRef.current) {
+      const newVolume = value[0];
+      audioRef.current.volume = newVolume;
+      setVolume(newVolume);
+      setMuted(newVolume === 0);
+    }
+  };
+  
+  // Toggle mute
+  const toggleMute = () => {
+    if (audioRef.current) {
+      audioRef.current.muted = !muted;
+      setMuted(!muted);
+    }
+  };
+  
+  // Handle repeat toggle
+  const toggleRepeat = () => {
+    if (audioRef.current) {
+      audioRef.current.loop = !repeat;
+      setRepeat(!repeat);
+    }
+  };
+  
+  // Handle shuffle toggle
+  const toggleShuffle = () => {
+    setShuffle(!shuffle);
+  };
   
   return (
-    <div className={cn("flex flex-col w-full", className)}>
-      <div className="flex items-center justify-center gap-4 mb-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => {/* Previous track logic */}}
-          disabled={loading}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <SkipBack size={18} />
-        </Button>
-        
-        <Button
-          variant="default"
-          size="icon"
-          onClick={handlePlayPause}
-          disabled={loading}
-          className="w-10 h-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
-        >
-          {loading ? (
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          ) : playing ? (
-            <Pause size={18} />
-          ) : (
-            <Play size={18} className="ml-0.5" />
+    <div className={cn("w-full bg-dark-200 p-3 rounded-lg", className)}>
+      {/* Hidden audio element */}
+      <audio
+        ref={audioRef}
+        src={src}
+        onEnded={onEnded}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
+        onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration || 0)}
+      />
+      
+      {/* Track info and controls */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center space-x-3">
+          {albumArt && (
+            <div className="h-12 w-12 rounded-md overflow-hidden flex-shrink-0">
+              <img src={albumArt} alt={`${title} by ${artist}`} className="w-full h-full object-cover" />
+            </div>
           )}
-        </Button>
+          <div>
+            <h4 className="font-medium text-white truncate">{title}</h4>
+            <p className="text-sm text-gray-400 truncate">{artist}</p>
+          </div>
+        </div>
         
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => {/* Next track logic */}}
-          disabled={loading}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <SkipForward size={18} />
-        </Button>
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleShuffle}
+            className={cn("text-gray-400 hover:text-white", shuffle && "text-primary")}
+            title={iconLabels.shuffle}
+          >
+            <Shuffle size={18} />
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onPrevious}
+            className="text-gray-400 hover:text-white"
+            disabled={!onPrevious}
+            title={iconLabels.previous}
+          >
+            <SkipBack size={20} />
+          </Button>
+          
+          <Button
+            variant="default"
+            size="icon"
+            onClick={togglePlay}
+            className="bg-white text-black hover:bg-gray-200 h-8 w-8 rounded-full"
+            title={playing ? iconLabels.pause : iconLabels.play}
+          >
+            {playing ? <Pause size={18} /> : <Play size={18} />}
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onNext}
+            className="text-gray-400 hover:text-white"
+            disabled={!onNext}
+            title={iconLabels.next}
+          >
+            <SkipForward size={20} />
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleRepeat}
+            className={cn("text-gray-400 hover:text-white", repeat && "text-primary")}
+            title={iconLabels.repeat}
+          >
+            <Repeat size={18} />
+          </Button>
+        </div>
       </div>
       
-      <div className="w-full flex items-center gap-2">
-        <span className="text-xs text-muted-foreground min-w-[40px]">
-          {formatTime(currentTime)}
-        </span>
+      {/* Progress bar */}
+      <div className="flex items-center space-x-2">
+        <span className="text-xs text-gray-400 w-10 text-right">{formatTime(currentTime)}</span>
         
         <Slider
           value={[currentTime]}
@@ -267,23 +243,28 @@ export function AudioPlayer({
           max={duration || 100}
           step={0.1}
           onValueChange={handleSeek}
-          disabled={loading || duration === 0}
           className="flex-1"
         />
         
-        <span className="text-xs text-muted-foreground min-w-[40px]">
-          {formatTime(duration)}
-        </span>
+        <span className="text-xs text-gray-400 w-10">{formatTime(duration)}</span>
       </div>
       
-      <div className="flex items-center gap-2 mt-2">
+      {/* Volume control */}
+      <div className="flex items-center mt-2">
         <Button
           variant="ghost"
           size="icon"
-          onClick={handleMuteToggle}
-          className="text-muted-foreground hover:text-foreground"
+          onClick={toggleMute}
+          className="text-gray-400 hover:text-white"
+          title={muted ? iconLabels.unmute : iconLabels.mute}
         >
-          {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          {muted || volume === 0 ? (
+            <VolumeX size={18} />
+          ) : volume < 0.5 ? (
+            <Volume1 size={18} />
+          ) : (
+            <Volume2 size={18} />
+          )}
         </Button>
         
         <Slider
@@ -292,7 +273,7 @@ export function AudioPlayer({
           max={1}
           step={0.01}
           onValueChange={handleVolumeChange}
-          className="w-24"
+          className="w-24 ml-2"
         />
       </div>
     </div>
