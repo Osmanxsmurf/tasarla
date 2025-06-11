@@ -1,125 +1,138 @@
-import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { CircleUser, Home, Library, ListMusic, LayoutGrid, Heart, History, Bot } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
+import React from 'react';
+import { useSpotifyAuth } from '@/context/SpotifyAuthContext';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Sparkles, 
+  Compass, 
+  TrendingUp, 
+  Heart, 
+  Clock,
+  Settings,
+  LogOut,
+  User,
+  Play
+} from 'lucide-react';
+import { SiSpotify } from 'react-icons/si';
 
-type SidebarProps = {
-  activeRoute: string;
-};
+interface SidebarProps {
+  activeView: string;
+  onViewChange: (view: string) => void;
+}
 
-export default function Sidebar({ activeRoute }: SidebarProps) {
-  const { user } = useAuth();
-  
-  // Fetch user playlists
-  const { data: playlists } = useQuery({
-    queryKey: ["/api/playlists"],
-    enabled: !!user,
-  });
-  
+export function Sidebar({ activeView, onViewChange }: SidebarProps) {
+  const { isAuthenticated, user, login, logout } = useSpotifyAuth();
+
+  const navigationItems = [
+    { id: 'discover', label: 'Keşfet', icon: Compass, color: 'text-blue-400', gradient: 'from-blue-400 to-cyan-400' },
+    { id: 'trending', label: 'Haftalık Trendler', icon: TrendingUp, color: 'text-orange-400', gradient: 'from-orange-400 to-pink-400' },
+    { id: 'favorites', label: 'Favorilerim', icon: Heart, color: 'text-red-400', gradient: 'from-red-400 to-pink-400' },
+    { id: 'recent', label: 'Son Dinlenenler', icon: Clock, color: 'text-purple-400', gradient: 'from-purple-400 to-blue-400' },
+    { id: 'player', label: 'Şimdi Çalıyor', icon: Play, color: 'text-green-400', gradient: 'from-green-400 to-emerald-400' },
+  ];
+
   return (
-    <aside className="bg-sidebar h-full w-20 md:w-64 flex-shrink-0 flex flex-col border-r border-sidebar-border hidden md:flex">
-      <nav className="flex-1 pt-4">
-        <ul>
-          <li className="mb-2 px-3">
-            <Link href="/">
-              <a className={cn(
-                "flex items-center py-3 px-3 rounded-md hover:bg-sidebar-accent transition",
-                activeRoute === "/" && "bg-sidebar-accent text-sidebar-primary"
-              )}>
-                <Home className="h-5 w-5 md:h-5 md:w-5" />
-                <span className="ml-3 text-sm font-medium hidden md:block">Keşfet</span>
-              </a>
-            </Link>
-          </li>
-          
-          <li className="mb-2 px-3">
-            <Link href="/library">
-              <a className={cn(
-                "flex items-center py-3 px-3 rounded-md hover:bg-sidebar-accent transition",
-                activeRoute === "/library" && "bg-sidebar-accent text-sidebar-primary"
-              )}>
-                <Library className="h-5 w-5 md:h-5 md:w-5" />
-                <span className="ml-3 text-sm font-medium hidden md:block">Kitaplık</span>
-              </a>
-            </Link>
-          </li>
-          
-          <li className="mb-2 px-3">
-            <Link href="/assistant">
-              <a className={cn(
-                "flex items-center py-3 px-3 rounded-md hover:bg-sidebar-accent transition",
-                activeRoute === "/assistant" && "bg-sidebar-accent text-sidebar-primary"
-              )}>
-                <Bot className="h-5 w-5 md:h-5 md:w-5" />
-                <span className="ml-3 text-sm font-medium hidden md:block">AI Asistan</span>
-              </a>
-            </Link>
-          </li>
-          
-          <li className="mb-2 px-3">
-            <Link href="/profile">
-              <a className={cn(
-                "flex items-center py-3 px-3 rounded-md hover:bg-sidebar-accent transition",
-                activeRoute === "/profile" && "bg-sidebar-accent text-sidebar-primary"
-              )}>
-                <CircleUser className="h-5 w-5 md:h-5 md:w-5" />
-                <span className="ml-3 text-sm font-medium hidden md:block">Profil</span>
-              </a>
-            </Link>
-          </li>
+    <aside className="w-72 bg-black/40 backdrop-blur-xl border-r border-white/10 flex flex-col">
+      {/* Logo Section */}
+      <div className="p-8 border-b border-white/10">
+        <div className="flex items-center space-x-4">
+          <div className="w-12 h-12 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
+            <Sparkles className="text-white text-xl animate-pulse" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-orange-400 bg-clip-text text-transparent">
+              Müzik Asistanım
+            </h1>
+            <p className="text-sm text-white/60 font-medium">Marjinal AI ile keşfet</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 p-6">
+        <ul className="space-y-3">
+          {navigationItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeView === item.id;
+            
+            return (
+              <li key={item.id}>
+                <button
+                  onClick={() => onViewChange(item.id)}
+                  className={`w-full flex items-center space-x-4 p-4 rounded-2xl transition-all duration-300 group ${
+                    isActive 
+                      ? 'bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 shadow-lg' 
+                      : 'hover:bg-white/5 hover:backdrop-blur-md'
+                  }`}
+                >
+                  <div className={`p-2 rounded-xl ${isActive ? `bg-gradient-to-r ${item.gradient}` : 'bg-white/10'} transition-all duration-300`}>
+                    <Icon className={`w-5 h-5 ${isActive ? 'text-white' : item.color} transition-colors duration-300`} />
+                  </div>
+                  <span className={`font-medium ${isActive ? 'text-white' : 'text-white/80'} transition-colors duration-300`}>
+                    {item.label}
+                  </span>
+                  {isActive && (
+                    <div className="ml-auto w-2 h-2 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full animate-pulse"></div>
+                  )}
+                </button>
+              </li>
+            );
+          })}
         </ul>
-        
-        <div className="mt-8 px-6 hidden md:block">
-          <h3 className="text-xs uppercase text-muted-foreground font-medium mb-3">Kitaplık</h3>
-          <ul>
-            <li className="mb-2">
-              <Link href="/library/liked">
-                <a className="flex items-center py-2 text-sm hover:text-foreground transition">
-                  <Heart className="h-4 w-4 text-red-500 mr-3" />
-                  Beğendiklerim
-                </a>
-              </Link>
-            </li>
-            <li className="mb-2">
-              <Link href="/library/recent">
-                <a className="flex items-center py-2 text-sm hover:text-foreground transition">
-                  <History className="h-4 w-4 text-muted-foreground mr-3" />
-                  Son Çalınanlar
-                </a>
-              </Link>
-            </li>
-            <li className="mb-2">
-              <Link href="/library/playlists">
-                <a className="flex items-center py-2 text-sm hover:text-foreground transition">
-                  <ListMusic className="h-4 w-4 text-muted-foreground mr-3" />
-                  Çalma Listeleri
-                </a>
-              </Link>
-            </li>
-          </ul>
-        </div>
-        
-        <div className="mt-8 px-6 hidden md:block">
-          <h3 className="text-xs uppercase text-muted-foreground font-medium mb-3">Çalma Listeleri</h3>
-          <ul>
-            {playlists && playlists.length > 0 ? (
-              playlists.map((playlist: any) => (
-                <li className="mb-2" key={playlist.id}>
-                  <Link href={`/playlist/${playlist.id}`}>
-                    <a className="flex items-center py-2 text-sm hover:text-foreground transition">
-                      <ListMusic className="h-4 w-4 text-muted-foreground mr-3" />
-                      {playlist.name}
-                    </a>
-                  </Link>
-                </li>
-              ))
-            ) : (
-              <li className="text-sm text-muted-foreground py-2">Henüz çalma listeniz yok</li>
-            )}
-          </ul>
-        </div>
       </nav>
+
+      {/* User Profile */}
+      <div className="p-6 border-t border-white/10">
+        {isAuthenticated && user ? (
+          <div className="flex items-center space-x-4 p-4 rounded-2xl bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-white/10">
+            <Avatar className="w-12 h-12 ring-2 ring-purple-400/30">
+              <AvatarImage src={user.images?.[0]?.url} alt={user.display_name} />
+              <AvatarFallback className="bg-gradient-to-r from-purple-500 to-pink-500 text-white">
+                <User className="w-6 h-6" />
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-white truncate">{user.display_name}</p>
+              <div className="flex items-center space-x-2 mt-1">
+                <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+                  <SiSpotify className="w-3 h-3 mr-1" />
+                  Premium
+                </Badge>
+              </div>
+            </div>
+            <div className="flex space-x-2">
+              <Button variant="ghost" size="sm" className="text-white/60 hover:text-white hover:bg-white/10 rounded-xl">
+                <Settings className="w-4 h-4" />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={logout} className="text-white/60 hover:text-white hover:bg-white/10 rounded-xl">
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center space-x-4 p-4 rounded-2xl bg-white/5 border border-white/10">
+              <Avatar className="w-12 h-12 bg-gradient-to-r from-gray-600 to-gray-500">
+                <AvatarFallback className="bg-gradient-to-r from-gray-600 to-gray-500 text-white">
+                  <User className="w-6 h-6" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <p className="font-semibold text-white">Misafir Kullanıcı</p>
+                <p className="text-sm text-white/60">Deneyimi kişiselleştirin</p>
+              </div>
+            </div>
+            <Button 
+              onClick={login} 
+              className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-2xl py-3 font-semibold shadow-lg"
+            >
+              <SiSpotify className="w-5 h-5 mr-2" />
+              Spotify'a Bağlan
+            </Button>
+          </div>
+        )}
+      </div>
     </aside>
   );
 }
