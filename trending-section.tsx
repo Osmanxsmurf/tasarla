@@ -1,152 +1,128 @@
-import { useQuery } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { Play, Flame, TrendingUp } from "lucide-react";
-import type { TrendingSong } from "@/types/music";
+import React from 'react';
+import { Play, Heart, MoreHorizontal, ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { useMusic } from '@/contexts/music-context';
+import { Skeleton } from '@/components/ui/skeleton';
 
-interface TrendingSectionProps {
-  onSongPlay?: (song: TrendingSong) => void;
-}
+export function TrendingSection() {
+  const { trendingSongs, playSong } = useMusic();
 
-export function TrendingSection({ onSongPlay }: TrendingSectionProps) {
-  const { data: trendingSongs, isLoading, error } = useQuery({
-    queryKey: ["/api/songs/trending"],
-    select: (data) => data?.slice(0, 10) || [], // Limit to top 10
-  });
-
-  if (isLoading) {
-    return <TrendingSkeleton />;
-  }
-
-  if (error) {
+  if (trendingSongs.length === 0) {
     return (
-      <div className="text-center py-8">
-        <p className="text-red-400">Trend şarkılar yüklenirken hata oluştu</p>
-        <p className="text-sm text-gray-500 mt-2">Lütfen daha sonra tekrar deneyin</p>
-      </div>
-    );
-  }
-
-  if (!trendingSongs || trendingSongs.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <Flame className="w-12 h-12 text-orange-500 mx-auto mb-4" />
-        <p className="text-gray-400">Henüz trend şarkı yok</p>
-        <p className="text-sm text-gray-500 mt-2">Yakında popüler şarkıları burada göreceksiniz</p>
-      </div>
-    );
-  }
-
-  // Mock trending data with positions and percentages
-  const mockTrendingData = [
-    { position: 1, title: "Sen Anlat Karadeniz", artist: "Sezen Aksu", trendPercentage: 24, imageUrl: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100" },
-    { position: 2, title: "Gel Gör Beni Aşk Neyledi", artist: "Tarkan", trendPercentage: 18, imageUrl: "https://images.unsplash.com/photo-1571330735066-03aaa9429d89?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100" },
-    { position: 3, title: "Derdim Olsun", artist: "Manga", trendPercentage: 15, imageUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100" },
-    { position: 4, title: "Aşk Laftan Anlamaz", artist: "Buray", trendPercentage: 12, imageUrl: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100" },
-    { position: 5, title: "Unuturum Elbet", artist: "Murat Boz", trendPercentage: 10, imageUrl: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100" },
-  ];
-
-  return (
-    <section>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold flex items-center space-x-3">
-          <Flame className="text-orange-500 w-6 h-6" />
-          <span>Türkiye'de Trend</span>
-        </h2>
-        <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-          Tümünü Gör
-        </Button>
-      </div>
-      
-      <div className="space-y-4">
-        {mockTrendingData.map((song) => (
-          <TrendingItem 
-            key={song.position} 
-            song={song} 
-            onPlay={() => onSongPlay?.(song as TrendingSong)} 
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-interface TrendingItemProps {
-  song: {
-    position: number;
-    title: string;
-    artist: string;
-    trendPercentage: number;
-    imageUrl: string;
-  };
-  onPlay: () => void;
-}
-
-function TrendingItem({ song, onPlay }: TrendingItemProps) {
-  return (
-    <div className="flex items-center space-x-4 p-4 rounded-lg hover:bg-white/5 transition-colors cursor-pointer group">
-      <div className="text-lg font-bold text-gray-400 w-6">
-        #{song.position}
-      </div>
-      
-      <img 
-        src={song.imageUrl}
-        alt={`${song.title} cover`}
-        className="w-12 h-12 rounded-lg object-cover"
-        onError={(e) => {
-          const target = e.target as HTMLImageElement;
-          target.src = "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100";
-        }}
-      />
-      
-      <div className="flex-1 min-w-0">
-        <h3 className="font-semibold truncate">{song.title}</h3>
-        <p className="text-sm text-gray-400 truncate">{song.artist}</p>
-      </div>
-      
-      <div className="flex items-center space-x-3">
-        <Badge variant="secondary" className="bg-green-500/20 text-green-400">
-          <TrendingUp className="w-3 h-3 mr-1" />
-          +{song.trendPercentage}%
-        </Badge>
-        
-        <Button 
-          variant="ghost" 
-          size="icon"
-          className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-green-400"
-          onClick={onPlay}
-        >
-          <Play className="w-5 h-5 fill-current" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function TrendingSkeleton() {
-  return (
-    <section>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-3">
-          <Skeleton className="w-6 h-6 rounded" />
-          <Skeleton className="w-48 h-8 rounded" />
-        </div>
-        <Skeleton className="w-24 h-6 rounded" />
-      </div>
-      
-      <div className="space-y-4">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="flex items-center space-x-4 p-4">
-            <Skeleton className="w-6 h-6 rounded" />
-            <Skeleton className="w-12 h-12 rounded-lg" />
-            <div className="flex-1">
-              <Skeleton className="w-3/4 h-4 mb-2 rounded" />
-              <Skeleton className="w-1/2 h-3 rounded" />
-            </div>
-            <Skeleton className="w-16 h-6 rounded" />
-            <Skeleton className="w-8 h-8 rounded" />
+      <section className="mb-12">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-3xl font-bold mb-2 text-white">Trending Now</h2>
+            <p className="text-gray-400">What everyone's listening to right now</p>
           </div>
+        </div>
+
+        <div className="space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="flex items-center space-x-4 p-4">
+              <Skeleton className="w-8 h-8" />
+              <Skeleton className="w-16 h-16 rounded-lg" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-3 w-1/4" />
+              </div>
+              <Skeleton className="h-6 w-16" />
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  const handlePlaySong = (song: any, index: number) => {
+    playSong(song, trendingSongs);
+  };
+
+  const formatStreams = (popularity: number) => {
+    if (popularity > 1000000) {
+      return `${(popularity / 1000000).toFixed(1)}M`;
+    } else if (popularity > 1000) {
+      return `${(popularity / 1000).toFixed(1)}K`;
+    }
+    return popularity.toString();
+  };
+
+  return (
+    <section className="mb-12">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h2 className="text-3xl font-bold mb-2 text-white">Trending Now</h2>
+          <p className="text-gray-400">What everyone's listening to right now</p>
+        </div>
+        <Button 
+          variant="ghost"
+          className="text-primary hover:text-primary/80 font-medium flex items-center space-x-1"
+        >
+          <span>See All Trends</span>
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="space-y-4">
+        {trendingSongs.slice(0, 5).map((song, index) => (
+          <Card 
+            key={song.id}
+            className="glassmorphism rounded-2xl p-4 flex items-center space-x-4 hover:bg-white/5 transition-colors cursor-pointer group border-white/10"
+          >
+            <div className="flex items-center justify-center w-8 h-8 text-primary font-bold">
+              <span>{index + 1}</span>
+            </div>
+            
+            <div className="relative">
+              <img 
+                src={song.thumbnail}
+                alt={`${song.title} artwork`}
+                className="w-16 h-16 rounded-lg object-cover"
+              />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                <Button
+                  onClick={() => handlePlaySong(song, index)}
+                  className="bg-primary hover:bg-primary/90 w-8 h-8 rounded-full flex items-center justify-center"
+                >
+                  <Play className="text-white h-3 w-3 ml-0.5" fill="currentColor" />
+                </Button>
+              </div>
+            </div>
+            
+            <div className="flex-1">
+              <h3 className="font-semibold mb-1 text-white" title={song.title}>
+                {song.title}
+              </h3>
+              <p className="text-gray-400 text-sm" title={song.artist}>
+                {song.artist}
+              </p>
+            </div>
+            
+            <div className="text-right">
+              <div className="text-sm font-medium text-primary">
+                {formatStreams(song.popularity || 0)}
+              </div>
+              <div className="text-xs text-gray-400">streams</div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <Heart className="h-4 w-4 text-gray-400 hover:text-red-400" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <MoreHorizontal className="h-4 w-4 text-gray-400" />
+              </Button>
+            </div>
+          </Card>
         ))}
       </div>
     </section>
